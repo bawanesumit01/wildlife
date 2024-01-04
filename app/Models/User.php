@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\Otp;
 
 class User extends Authenticatable
 {
@@ -21,6 +22,15 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
+        'phone',
+        'dob',
+        'city',
+        'state',
+        'qualification',
+        'gender',
+        'profile_photo',
+        'aadhar_photo_front', 'aadhar_photo_back','verified'
     ];
 
     /**
@@ -42,4 +52,9 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
+
+    public function otps()
+    {
+        return $this->hasMany(Otp::class);
+    }
 }
