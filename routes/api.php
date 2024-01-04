@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\API\AnimalEntryController;
 use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\ReptileEntryController;
 use App\Mail\OtpMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -30,3 +32,11 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 Route::post('/resend-otp', [AuthController::class, 'resendOtp'])->name('resend-otp');
 Route::post('/login', [AuthController::class, 'login']);
 Route::middleware(['auth:sanctum'])->post('/logout', [AuthController::class, 'logout']);
+
+
+
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('/animal-entry', [AnimalEntryController::class, 'Animal']);
+    Route::post('/reptile-entry', [ReptileEntryController::class, 'Reptile']);
+});
+
