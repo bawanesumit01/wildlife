@@ -64,7 +64,7 @@ class ReptileEntryController extends Controller
                 'reptile_description' => 'string|max:255|nullable',
                 'charges' => 'required|string|max:255',
                 'reptile_image' => 'required|image|max:3072',
-                'ip_address' => 'required|string|max:255',
+                'ip_address' => 'nullable|string|max:255',
                 'latitude' => 'nullable|string|max:255',
                 'longitude' => 'nullable|string|max:255',
             ];
@@ -94,7 +94,7 @@ class ReptileEntryController extends Controller
                 $uploadedImages['reptile_image'] = "upload/reptile/$imageName";
             }
 
-            $userIpAddress = $request->ip_address;
+            $userIpAddress = $request->ip();
             $location = Location::get($userIpAddress);
 
             if ($location && $location->latitude && $location->longitude) {
@@ -132,6 +132,23 @@ class ReptileEntryController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             $errors = $e->validator->getMessageBag();
             return response()->json(['message' => 'Validation error', 'errors' => $errors->toArray(), 'status' => false], 422);
+        }
+    }
+
+    public function getAllEntries(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            if ($user && $user->role === 'admin') {
+                $entries = ReptileEntry::all();
+            } else {
+                $entries = ReptileEntry::where('user_id', $user->id)->get();
+            }
+
+            return response()->json(['entries' => $entries], 200);
+        } catch (\Exception $e) {
+            log::error('Error while fetching entries: ' . $e->getMessage());
+            return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage()], 500);
         }
     }
 }

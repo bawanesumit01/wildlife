@@ -24,4 +24,5 @@ class AnimalEntry extends Model
         'latitude',
         'longitude',
     ];
+    
 }

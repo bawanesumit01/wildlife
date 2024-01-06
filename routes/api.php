@@ -37,6 +37,8 @@ Route::middleware(['auth:sanctum'])->post('/logout', [AuthController::class, 'lo
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/animal-entry', [AnimalEntryController::class, 'Animal']);
+    Route::get('/animal-data', [AnimalEntryController::class, 'getAllEntries']);
     Route::post('/reptile-entry', [ReptileEntryController::class, 'Reptile']);
+    Route::get('/reptile-data', [ReptileEntryController::class, 'getAllEntries']);
 });
 
