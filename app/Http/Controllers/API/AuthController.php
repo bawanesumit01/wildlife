@@ -21,20 +21,163 @@ use Exception;
 
 class AuthController extends Controller
 {
-    /**
-     * Store a newly created resource in storage.
-     */
+
     public function Register(Request $request)
     {
         // dd($request);
         // die();
+
         try {
+
             $allowedFields = [
+                'email',
+                'phone',
+            ];
+
+
+
+            $requestFields = array_keys(request()->all());
+
+            if (!in_array('phone', $requestFields)) {
+                return response()->json([
+                    'message' => 'The phone field is required.',
+                    'status' => false,
+                    'code' => 422,
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            if (!in_array('email', $requestFields)) {
+                return response()->json([
+                    'message' => 'The email field is required.',
+                    'status' => false,
+                    'code' => 422,
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            // Check for unknown fields
+            // $unknownFields = array_diff($requestFields, $allowedFields);
+
+            // if (!empty($unknownFields)) {
+
+            //     return response()->json([
+            //         'message' => 'Unknown fields present in the request.',
+            //         'status'=> false,'code' => 400, 
+            //         'unknown_fields' => $unknownFields,
+            //         ], 400);
+            // }
+
+
+            $validationRules = [
+                'email' => 'required|string|lowercase|email|max:255|unique:' . User::class,
+                'phone' => 'required|string|min:10|max:12|unique:' . User::class,
+            ];
+
+
+            $validator = Validator::make(request()->all(), $validationRules);
+
+
+            if ($validator->fails()) {
+
+                return response()->json(['message' => $validator->errors(), 'status' => false, 'code' => 422], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+
+            $this->validate($request, $validationRules);
+
+
+
+            try {
+                $otp = Otp::create([
+                    'email' => $request->email,
+                    'phone' => $request->phone,
+                    'otp_email' => $this->generateOtp(),
+                    'otp_phone' => $this->generateMobileOtp(),
+                ]);
+
+                \Log::info('OTP created: ' . $otp->otp_email);
+                \Log::info('OTP created: ' . $otp->otp_phone);
+
+                // Mail::to($user->email)->send(new OtpMail($otp->otp, 'registration', $user));
+
+                return response()->json([
+                    'status' => true,
+                    'code' => 200,
+                    'message' => 'User registered successfully and OTP sent for email verification',
+                    'data' => [
+                        'otp_email' => $otp->otp_email,
+                        'otp_phone' => $otp->otp_phone
+                    ],
+
+                ], Response::HTTP_OK);
+            } catch (\Exception $e) {
+                \Log::error('Error sending OTP email: ' . $e->getMessage());
+                return response()->json([
+                    'status' => false,
+                    'message' => 'An error occurred while sending OTP.' . $e->getMessage(),
+                    'code' => 500,
+                    'data' => (object)[],
+                ],  Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+
+            // Mark the user as verified (for testing purposes)
+            $user->update(['verified' => true]);
+
+            return response()->json([
+                'status' => true,
+                'code' => 200,
+                'message' => 'User registered successfully and OTP sent for email verification',
+                'data' => [
+                    'otp_email' => $otp->otp_email,
+                    'otp_phone' => $otp->otp_phone,
+                ],
+            ],  Response::HTTP_OK);
+        } catch (\Exception $e) {
+            \log::error('Error during registration: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'code' => 500,
+                'message' => 'An error occurred while processing your request.',
+                'error' => $e->getMessage(),
+            ],   Response::HTTP_INTERNAL_SERVER_ERROR);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $errors = $e->validator->getMessageBag();
+            return response()->json([
+                'status' => false,
+                'code' => 422,
+                'message' => 'Validation error',
+                'errors' => $errors->toArray(),
+            ],   Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    public function generateOtp()
+    {
+        $otp_email = str_pad(random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+        \Log::info('Generated OTP: ' . $otp_email);
+        return $otp_email;
+    }
+
+    public function generateMobileOtp()
+    {
+        $otp_phone = str_pad(random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+        \Log::info('Generated OTP: ' . $otp_phone);
+        return $otp_phone;
+    }
+
+    public function verifyOtp(Request $request)
+    {
+        // dd($request);
+        // die();
+        
+        try {
+
+            $allowedFields = [
+                'otp_email',
+                'otp_phone',
                 'name',
                 'email',
                 'password',
                 'password_confirmation',
-                'role',
                 'phone',
                 'dob',
                 'city',
@@ -42,7 +185,8 @@ class AuthController extends Controller
                 'qualification',
                 'gender',
                 'profile_photo',
-                'aadhar_photo_front', 'aadhar_photo_back'
+                'aadhar_photo_front',
+                'aadhar_photo_back',
             ];
 
             $requestFields = array_keys(request()->all());
@@ -52,18 +196,16 @@ class AuthController extends Controller
 
             if (!empty($unknownFields)) {
 
-                $errorResponse = [
-                    'error' => [
-                        'message' => 'Unknown fields present in the request.',
-                        'unknown_fields' => $unknownFields,
-                    ],
-                ];
-                return response()->json($errorResponse, Response::HTTP_UNPROCESSABLE_ENTITY);
+                return response()->json(['message' => 'Unknown fields present in the request.', 'status' => false, 'code' => 400, 'unknown_fields' => $unknownFields],  Response::HTTP_BAD_REQUEST);
             }
 
             $request->merge(['gender' => ucfirst(strtolower($request->gender))]);
 
+
+
             $validationRules = [
+                'otp_email' => 'required|string|size:4',
+                'otp_phone' => 'required|string|size:4',
                 'name' => 'required|string|max:255',
                 'email' => 'required|string|lowercase|email|max:255|unique:' . User::class,
                 'password' => ['required', 'confirmed', Rules\Password::defaults()],
@@ -97,18 +239,24 @@ class AuthController extends Controller
                 'aadhar_photo_back' => 'required|image|max:3072',
             ];
 
-
-
-            $validator = Validator::make(request()->all(), $validationRules);
-
-
+            $customMessages = [
+                'profile_photo.max' => 'The profile photo size should not exceed 3 MB.',
+                'aadhar_photo_front.max' => 'The Aadhar front photo size should not exceed 3 MB.',
+                'aadhar_photo_back.max' => 'The Aadhar back photo size should not exceed 3 MB.',
+            ];
+            
+            $validator = Validator::make(request()->all(), $validationRules, $customMessages);
+            
             if ($validator->fails()) {
-
-                return response()->json(['error' => $validator->errors()], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return response()->json([
+                    'message' => $validator->errors(),
+                    'status' => false,
+                    'code' => 422
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
+            
+            $this->validate($request, $validationRules, $customMessages);
 
-
-            $this->validate($request, $validationRules);
 
             $allowedImageExtensions = ['jpg', 'jpeg', 'png'];
             $uploadedImages = [];
@@ -118,7 +266,7 @@ class AuthController extends Controller
                 $imageName = time() . '.' . $profile_photo->getClientOriginalExtension();
 
                 if (!in_array($profile_photo->getClientOriginalExtension(), $allowedImageExtensions)) {
-                    return response()->json(['message' => 'Profile photo extension should be jpg, jpeg, png.', 'status' => false], 400);
+                    return response()->json(['message' => 'Profile photo extension should be jpg, jpeg, png.', 'status' => false, 'code' => 422],  Response::HTTP_UNPROCESSABLE_ENTITY);
                 }
 
                 $path = public_path('upload/profile');
@@ -131,7 +279,7 @@ class AuthController extends Controller
                 $imageName = time() . '.' . $aadhar_photo_front->getClientOriginalExtension();
 
                 if (!in_array($aadhar_photo_front->getClientOriginalExtension(), $allowedImageExtensions)) {
-                    return response()->json(['message' => 'Aadhar front photo extension should be jpg, jpeg, png.', 'status' => false], 400);
+                    return response()->json(['message' => 'Aadhar front photo extension should be jpg, jpeg, png.', 'status' => false, 'code' => 422],  Response::HTTP_UNPROCESSABLE_ENTITY);
                 }
 
                 $path = public_path('upload/aadhar_front');
@@ -144,13 +292,67 @@ class AuthController extends Controller
                 $imageName = time() . '.' . $aadhar_photo_back->getClientOriginalExtension();
 
                 if (!in_array($aadhar_photo_back->getClientOriginalExtension(), $allowedImageExtensions)) {
-                    return response()->json(['message' => 'Aadhar back photo extension should be jpg, jpeg, png.', 'status' => false], 400);
+                    return response()->json(['message' => 'Aadhar back photo extension should be jpg, jpeg, png.', 'status' => false, 'code' => 422], Response::HTTP_UNPROCESSABLE_ENTITY);
                 }
 
                 $path = public_path('upload/aadhar_back');
                 $aadhar_photo_back->move($path, $imageName);
                 $uploadedImages['aadhar_photo_back'] = "upload/aadhar_back/$imageName";
             }
+
+
+            // Find the OTP record with the provided OTP
+            $otp = Otp::where('otp_email', $request->otp_email)->first();
+            $mobileOtp = Otp::where('otp_phone', $request->otp_phone)->first();
+
+            // Check if the user matches
+            if ($otp->email != $request->email && $otp->phone != $request->phone) {
+                return response()->json(['message' => 'Invalid Email And Phone Number For This OTP', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
+            } elseif ($otp->email != $request->email) {
+                return response()->json(['message' => 'Invalid Email For This OTP', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
+            } elseif ($otp->phone != $request->phone) {
+                return response()->json(['message' => 'Invalid Phone Number For This OTP', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
+            }
+
+
+            $user = User::where('email', $request->email)->where('phone', $request->phone)->first();
+
+            if ($user && $user->verified == 1) {
+                return response()->json(['message' => 'You are already verified', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
+            }
+
+
+            // Expire existing OTPs for the user
+            Otp::where('email', $request->email)->where('phone', $request->phone)->where('expired', 0)->update(['expired' => 1]);
+
+
+            // Check if the OTP is not found
+            if (!$otp && !$mobileOtp) {
+                return response()->json(['message' => 'Invalid OTP For Email And Mobile Number', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
+            } elseif (!$otp) {
+                return response()->json(['message' => 'Invalid OTP For Email', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
+            } elseif (!$mobileOtp) {
+                return response()->json(['message' => 'Invalid OTP For Mobile Number', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
+            }
+
+            // Check if the OTP has expired
+            if ($otp->expired == 1 && $mobileOtp->expired == 1) {
+                return response()->json(['message' => 'OTP Has Expired For Email And Mobile Number', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
+            }
+
+
+
+            // Check if the OTP has passed the expiration time
+            $expirationTimeInMinutes = 10; // Set the expiration time as per your requirement
+            $expirationTime = Carbon::parse($otp->created_at)->addMinutes($expirationTimeInMinutes);
+
+            if ($expirationTime->isPast()) {
+                // Mark the OTP as expired
+                $otp->update(['expired' => 1]);
+                \Log::info('OTP expired for user: ' . $request->email . 'and' . $request->phone);
+                return response()->json(['message' => 'OTP has expired', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
+            }
+
 
             $user = User::create([
                 'name' => $request->name,
@@ -163,6 +365,7 @@ class AuthController extends Controller
                 'state' => $request->state,
                 'qualification' => $request->qualification,
                 'gender' => $request->gender,
+                'verified' => 1,
                 'profile_photo' => $uploadedImages['profile_photo'],
                 'aadhar_photo_front' => $uploadedImages['aadhar_photo_front'],
                 'aadhar_photo_back' => $uploadedImages['aadhar_photo_back'],
@@ -172,206 +375,143 @@ class AuthController extends Controller
 
             Auth::login($user);
 
-            try {
-                $otp = Otp::create([
-                    'user_id' => $user->id,
-                    'otp' => $this->generateOtp(),
-                ]);
-
-                \Log::info('OTP created: ' . $otp->otp);
-
-                Mail::to($user->email)->send(new OtpMail($otp->otp, 'registration', $user));
-
-                return response()->json(['message' => 'User registered successfully and OTP sent for email verification'], 200);
-            } catch (\Exception $e) {
-                \Log::error('Error sending OTP email: ' . $e->getMessage());
-                return response()->json(['message' => 'An error occurred while sending OTP.', 'status' => false, 'error' => $e->getMessage()], 500);
-            }
-
-            // Mark the user as verified (for testing purposes)
-            $user->update(['verified' => true]);
-
-            return response()->json(['message' => 'User registered successfully and OTP sent for email verification'], 200);
-        } catch (\Exception $e) {
-            \log::error('Error during registration: ' . $e->getMessage());
-            return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage()], 500);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            $errors = $e->validator->getMessageBag();
-            return response()->json(['message' => 'Validation error', 'errors' => $errors->toArray(), 'status' => false], 422);
-        }
-    }
-
-    public function generateOtp()
-    {
-        $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        \Log::info('Generated OTP: ' . $otp);
-        return $otp;
-    }
-
-    // Add the following function for OTP verification
-    public function verifyOtp(Request $request)
-    {
-        try {
-            // Validate the request parameters
-            $validator = Validator::make($request->all(), [
-                'otp' => 'required|string|size:6',
-                'user_id' => 'required|exists:users,id',
-            ]);
-
-            // Check if validation fails
-            if ($validator->fails()) {
-                \Log::error('Validation failed during OTP verification: ' . json_encode($validator->errors()->toArray()));
-                return response()->json(['error' => $validator->errors()], Response::HTTP_UNPROCESSABLE_ENTITY);
-            }
-
-            $user = User::find($request->user_id);
-            if ($user->verified) {
-                return response()->json(['message' => 'You are already verified'], 400);
-            }
-
-            // Find the OTP record with the provided OTP
-            $otp = Otp::where('otp', $request->otp)->where('expired', 0)->first();
-
-            // Check if the OTP is not found
-            if (!$otp) {
-                return response()->json(['message' => 'Invalid OTP'], 400);
-            }
-
-            // Check if the OTP has expired
-            if ($otp->expired) {
-                return response()->json(['message' => 'OTP has expired'], 400);
-            }
-
-            // Check if the OTP is verified (preventing multiple verifications)
-            if ($otp->verified) {
-                // Mark the OTP as expired
-                $otp->update(['expired' => 1]);
-                \Log::info('OTP was already verified for user_id: ' . $request->user_id);
-                return response()->json(['message' => 'OTP has expired'], 400);
-            }
-
-            // Check if the user_id matches
-            if ($otp->user_id != $request->user_id) {
-                return response()->json(['message' => 'Invalid user for this OTP'], 400);
-            }
-
-            // Check if the OTP has passed the expiration time
-            $expirationTimeInMinutes = 10; // Set the expiration time as per your requirement
-            $expirationTime = Carbon::parse($otp->created_at)->addMinutes($expirationTimeInMinutes);
-
-            if ($expirationTime->isPast()) {
-                // Mark the OTP as expired
-                $otp->update(['expired' => 1]);
-                \Log::info('OTP expired for user_id: ' . $request->user_id);
-                return response()->json(['message' => 'OTP has expired'], 400);
-            }
-
             // Update the users table to mark the user as verified
-            User::where('id', $otp->user_id)->update(['verified' => 1]);
+            // User::where('email', $otp->email)->where('phone', $mobileOtp->phone)->update(['verified' => 1]);
 
             // Mark the OTP as verified and expired
             $otp->update(['verified' => 1, 'expired' => 1]);
-            \Log::info('OTP verified successfully for user_id: ' . $request->user_id);
+            \Log::info('OTP verified successfully for user: ' . $request->email . 'and' . $request->phone);
 
-            return response()->json(['message' => 'OTP verification successful', 'user_id' => $otp->user_id], 200);
+            return response()->json([
+                'status' => true,
+                'code' => 200,
+                'message' => 'OTP verification successful',
+                'data' => [
+                    'email' => $request->email,
+                    'phone' => $request->phone,
+                ],
+            ], 200);
         } catch (\Exception $e) {
             \Log::error('Error during OTP verification: ' . $e->getMessage());
-            return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage(), 'code' => 500], Response::HTTP_INTERNAL_SERVER_ERROR);
         } catch (\Illuminate\Validation\ValidationException $e) {
             $errors = $e->validator->getMessageBag();
-            return response()->json(['message' => 'Validation error', 'errors' => $errors->toArray(), 'status' => false], 422);
+            return response()->json(['message' => 'Validation error', 'errors' => $errors->toArray(), 'status' => false, 'code' => 422],  Response::HTTP_UNPROCESSABLE_ENTITY);
+        }catch (\Illuminate\Http\Exceptions\PostTooLargeException $e) {
+            return response()->json([
+                'message' => 'File size exceeds the maximum allowed limit.'.$e,
+                'status' => false,
+                'code' => 413,  // HTTP Payload Too Large
+            ], 413);
         }
     }
 
     public function forgotPassword(Request $request)
     {
-        // dd($request);
-        // die();
         try {
-            // Validate the request parameters
             $validator = Validator::make($request->all(), [
-                'email' => 'required|email|exists:users,email',
+                'identifier' => 'required|string',
             ]);
 
-            // Check if validation fails
             if ($validator->fails()) {
-                \Log::error('Validation failed during forgot password: ' . json_encode($validator->errors()->toArray()));
-                return response()->json(['error' => $validator->errors()], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return response()->json(['error' => $validator->errors(), 'status' => false, 'code' => 422], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            // Find the user by email
-            $user = User::where('email', $request->email)->first();
+            $user = User::where('email', $request->identifier)
+                ->orWhere('phone', $request->identifier)
+                ->first();
+
+            if (!$user) {
+                return response()->json(['message' => 'User not found', 'status' => false, 'code' => 404], Response::HTTP_NOT_FOUND);
+            }
 
             // Check if the user is verified
             if (!$user->verified) {
-                return response()->json(['message' => 'Account not verified. Please verify your account.'], 400);
+                return response()->json(['message' => 'Account not verified. Please verify your account.', 'code' => 422, 'status' => false], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
             // Generate OTP
             $otp = $this->generateOtp();
 
+            // Determine whether the identifier is an email or a phone number
+            $identifierType = filter_var($request->identifier, FILTER_VALIDATE_EMAIL) ? 'email' : 'phone';
+
             // Save OTP in the database
             Otp::create([
                 'user_id' => $user->id,
-                'otp' => $otp,
+                $identifierType => $request->identifier,
+                "otp_{$identifierType}" => $otp,
             ]);
 
-            // Send OTP to the user's email
-            Mail::to($user->email)->send(new OtpMail($otp, 'forgot-password', $user));
+            // Send OTP to the user's email or phone
+            // if ($identifierType === 'email') {
+            //     Mail::to($user->email)->send(new OtpMail($otp, 'forgot-password', $user));
+            // }
+            // For phone, you can send OTP via SMS or any other preferred method.
 
             \Log::info('OTP sent for forgot password: ' . $otp);
 
-            return response()->json(['message' => 'OTP sent successfully for password reset'], 200);
+            return response()->json(['status' => true, 'message' => 'OTP sent successfully for password reset', 'otp' => $otp, 'identifier' => $request->identifier, 'code' => 200], Response::HTTP_OK);
         } catch (\Exception $e) {
             \Log::error('Error during forgot password: ' . $e->getMessage());
-            return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage(), 'code' => 500], Response::HTTP_INTERNAL_SERVER_ERROR);
         } catch (\Illuminate\Validation\ValidationException $e) {
             $errors = $e->validator->getMessageBag();
-            return response()->json(['message' => 'Validation error', 'errors' => $errors->toArray(), 'status' => false], 422);
+            return response()->json(['message' => 'Validation error', 'errors' => $errors->toArray(), 'status' => false, 'code' => 422], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
     }
 
     public function resetPassword(Request $request)
     {
         try {
-            // Validate the request parameters
+            // Validation rules for the request
             $validator = Validator::make($request->all(), [
-                'otp' => 'required|string|size:6',
-                'password' => ['required', 'confirmed', Rules\Password::defaults()],
-                'user_id' => 'required|exists:users,id',
+                'otp' => 'required|string|size:4',
+                'password' => ['required', Rules\Password::defaults()],
+                'identifier' => 'required|string',
             ]);
 
             // Check if validation fails
             if ($validator->fails()) {
                 \Log::error('Validation failed during password reset: ' . json_encode($validator->errors()->toArray()));
-                return response()->json(['error' => $validator->errors()], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return response()->json(['error' => $validator->errors(), 'status' => false, 'code' => 422], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            // Find the user by user_id
-            $user = User::find($request->user_id);
+            // Find the user based on email or phone
+            $user = User::where('email', $request->identifier)
+                ->orWhere('phone', $request->identifier)
+                ->first();
 
-            // Find the OTP record with the provided OTP
-            $otp = Otp::where('otp', $request->otp)
-                ->where('user_id', $request->user_id)
+            // Check if the user is not found
+            if (!$user) {
+                return response()->json(['message' => 'User not found', 'status' => false, 'code' => 404], Response::HTTP_NOT_FOUND);
+            }
+
+            // Find the OTP record with the provided OTP and identifier
+            $otp = Otp::where('user_id', $user->id)
                 ->where('expired', 0)
+                ->where(function ($query) use ($request) {
+                    $identifierType = filter_var($request->identifier, FILTER_VALIDATE_EMAIL) ? 'email' : 'phone';
+                    $query->where("otp_{$identifierType}", $request->otp);
+                })
                 ->first();
 
             // Check if the OTP is not found
             if (!$otp) {
-                return response()->json(['message' => 'Invalid OTP'], 400);
+                return response()->json(['message' => 'Invalid OTP', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
             }
 
             // Check if the OTP has expired
             if ($otp->expired) {
-                return response()->json(['message' => 'OTP has expired'], 400);
+                return response()->json(['message' => 'OTP has expired', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
             }
 
             // Check if the OTP is verified (preventing multiple verifications)
             if ($otp->verified) {
                 // Mark the OTP as expired
                 $otp->update(['expired' => 1]);
-                \Log::info('OTP was already verified for user_id: ' . $request->user_id);
-                return response()->json(['message' => 'OTP has expired'], 400);
+                \Log::info('OTP was already verified for user_id: ' . $otp->user_id);
+                return response()->json(['message' => 'OTP has expired', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
             }
 
             // Check if the OTP has passed the expiration time
@@ -381,8 +521,8 @@ class AuthController extends Controller
             if ($expirationTime->isPast()) {
                 // Mark the OTP as expired
                 $otp->update(['expired' => 1]);
-                \Log::info('OTP expired for user_id: ' . $request->user_id);
-                return response()->json(['message' => 'OTP has expired'], 400);
+                \Log::info('OTP expired for user_id: ' . $otp->user_id);
+                return response()->json(['message' => 'OTP has expired', 'status' => false, 'code' => 400], Response::HTTP_BAD_REQUEST);
             }
 
             // Update the user's password
@@ -390,25 +530,55 @@ class AuthController extends Controller
 
             // Mark the OTP as verified and expired
             $otp->update(['verified' => 1, 'expired' => 1]);
-            \Log::info('Password reset successful for user_id: ' . $request->user_id);
+            \Log::info('Password reset successful for user_id: ' . $user->id);
 
-            return response()->json(['message' => 'Password reset successful'], 200);
+            // Return a success response
+            return response()->json(['message' => 'Password reset successful', 'status' => true, 'code' => 200], Response::HTTP_OK);
         } catch (\Exception $e) {
+            // Handle any exceptions that may occur
             \Log::error('Error during password reset: ' . $e->getMessage());
-            return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage()], Response::HTTP_INTERNAL_SERVER_ERROR);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            // Handle validation exceptions
             $errors = $e->validator->getMessageBag();
-            return response()->json(['message' => 'Validation error', 'errors' => $errors->toArray(), 'status' => false], 422);
+            return response()->json(['message' => 'Validation error', 'errors' => $errors->toArray(), 'status' => false], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
     }
+
 
     public function resendOtp(Request $request)
     {
         try {
+            $allowedFields = [
+                'email',
+                'phone',
+            ];
+
+            $requestFields = array_keys(request()->all());
+
+            if (!in_array('phone', $requestFields)) {
+                return response()->json([
+                    'message' => 'The phone field is required.',
+                    'status' => false,
+                    'code' => 422,
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            if (!in_array('email', $requestFields)) {
+                return response()->json([
+                    'message' => 'The email field is required.',
+                    'status' => false,
+                    'code' => 422,
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+
             // Validate the request parameters
             $validator = Validator::make($request->all(), [
-                'user_id' => 'required|exists:users,id',
+                'email' => 'required|string|lowercase|email|max:255|unique:' . User::class,
+                'phone' => 'required|string|min:10|max:12|unique:' . User::class,
             ]);
+
 
             // Check if validation fails
             if ($validator->fails()) {
@@ -416,39 +586,40 @@ class AuthController extends Controller
                 return response()->json(['error' => $validator->errors()], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            // Find the user by user_id
-            $user = User::find($request->user_id);
+            Otp::where('email', $request->email)->where('phone', $request->phone)->delete();
 
-            // Check if the user is verified
-            if ($user->verified) {
-                return response()->json(['message' => 'User is already verified'], 400);
+
+            try {
+                $otp = Otp::create([
+                    'email' => $request->email,
+                    'phone' => $request->phone,
+                    'otp_email' => $this->generateOtp(),
+                    'otp_phone' => $this->generateMobileOtp(),
+                ]);
+
+                \Log::info('OTP created: ' . $otp->otp_email);
+                \Log::info('Mobile OTP created: ' . $otp->otp_phone);
+
+                // Send the OTP email
+                // Mail::to($request->email)->send(new OtpMail($otp->otp_email, 'registration', $otp));
+
+                return response()->json([
+                    'status' => true,
+                    'code' => 200,
+                    'message' => 'OTP resent successfully',
+                    'data' => [
+                        'otp_email' => $otp->otp_email,
+                        'otp_phone' => $otp->otp_phone,
+                    ],
+                ]);
+            } catch (\Exception $e) {
+                \Log::error('Error sending OTP: ' . $e->getMessage());
+                return response()->json([
+                    'status' => false,
+                    'message' => 'An error occurred while sending OTP.' . $e->getMessage(),
+                    'code' => 400,
+                ]);
             }
-
-            // Check if there is an unexpired OTP for the user
-            $existingOtp = Otp::where('user_id', $request->user_id)
-                ->where('expired', 0)
-                ->first();
-
-            if ($existingOtp) {
-                // If an unexpired OTP exists, return an error
-                return response()->json(['message' => 'An unexpired OTP already exists for this user'], 400);
-            }
-
-            // Generate a new OTP
-            $otp = $this->generateOtp();
-
-            // Save the new OTP in the database
-            Otp::create([
-                'user_id' => $user->id,
-                'otp' => $otp,
-            ]);
-
-            // Send the new OTP to the user's email
-            Mail::to($user->email)->send(new OtpMail($otp, 'registration', $user));
-
-            \Log::info('Resent OTP successfully for user_id: ' . $request->user_id);
-
-            return response()->json(['message' => 'OTP resent successfully'], 200);
         } catch (\Exception $e) {
             \Log::error('Error during OTP resend: ' . $e->getMessage());
             return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage()], 500);
@@ -464,7 +635,10 @@ class AuthController extends Controller
             // Check if user is already logged in
             if (Auth::check()) {
                 \Log::info('User is already logged in');
-                return response()->json(['message' => 'User is already logged in'], Response::HTTP_BAD_REQUEST);
+                return response()->json([
+                    'message' => 'User is already logged in',
+                    'status' => false,
+                    'code' => 400,], Response::HTTP_BAD_REQUEST);
             }
 
 
@@ -476,13 +650,21 @@ class AuthController extends Controller
 
             // Check if validation fails
             if ($validator->fails()) {
-                return response()->json(['error' => $validator->errors()], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return response()->json([
+                    'error' => $validator->errors(),
+                    'status' => false,
+                    'code' => 422, 兩
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
             // Attempt to authenticate the user
             $credentials = $request->only('email', 'password');
             if (!Auth::attempt($credentials)) {
-                return response()->json(['message' => 'Invalid credentials'], Response::HTTP_UNAUTHORIZED);
+                return response()->json([
+                    'message' => 'Invalid credentials',
+                    'status' => false,
+                    'code' => 422
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
             $user = Auth::user();
@@ -490,13 +672,41 @@ class AuthController extends Controller
             // Check if the user is verified
             if (!$user->verified) {
                 Auth::logout();
-                return response()->json(['message' => 'Account not verified. Please verify your account.'], Response::HTTP_FORBIDDEN);
+                return response()->json([
+                    'message' => 'Account not verified. Please verify your account.',
+                    'status' => false,
+                    'code' => 403
+                ], Response::HTTP_FORBIDDEN);
             }
 
             $tokenResult = $user->createToken('AuthToken');
             $token = $tokenResult->plainTextToken;
 
-            return response()->json(['token' => $token, 'user' => $user], Response::HTTP_OK);
+            return response()->json([
+                'status' => true,
+                'message' => 'User Login Successfully',
+                'code' => 200,
+                'data' => ([
+                    'token' => $token,
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'email_verified_at' => $user->email_verified_at,
+                    'created_at' => $user->created_at,
+                    'updated_at' => $user->updated_at,
+                    'role' => $user->role,
+                    'phone' => $user->phone,
+                    'dob' => $user->dob,
+                    'city' => $user->city,
+                    'state' => $user->state,
+                    'qualification' => $user->qualification,
+                    'gender' => $user->gender,
+                    'profile_photo' => $user->profile_photo,
+                    'aadhar_photo_front' => $user->aadhar_photo_front,
+                    'aadhar_photo_back' => $user->aadhar_photo_back,
+                    'verified' => $user->verified,
+                ]),
+            ], Response::HTTP_OK);
         } catch (\Exception $e) {
             \Log::error('Error during login: ' . $e->getMessage());
             return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage()], Response::HTTP_INTERNAL_SERVER_ERROR);
@@ -523,13 +733,36 @@ class AuthController extends Controller
             // Revoke all tokens associated with the user
             $user->tokens()->delete();
 
-            return response()->json(['message' => 'Logout successful'], Response::HTTP_OK);
+            return response()->json(['message' => 'Logout successful','code' => 200,'status' => true], Response::HTTP_OK);
         } catch (\Exception $e) {
             \Log::error('Error during logout: ' . $e->getMessage());
             return response()->json([
                 'message' => $e->getMessage(),
                 'status' => false,
+                'code' => 400
             ], Response::HTTP_BAD_REQUEST);
+        }
+    }
+    
+    public function userdata(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            if ($user && $user->role === 'admin') {
+                $user = User::all();
+            } else {
+                $user = User::where('id', $user->id)->first();
+            }
+
+            return response()->json([
+                "status" => true,
+                "message"=> "User data fetch successfully!",
+                "code"=> 200,
+                "data"=> $user,
+                ]);
+        } catch (\Exception $e) {
+            log::error('Error while fetching entries: ' . $e->getMessage());
+            return response()->json(['message' => 'An error occurred while processing your request.', 'code' => 500, 'status' => false, 'error' => $e->getMessage()]);
         }
     }
 }

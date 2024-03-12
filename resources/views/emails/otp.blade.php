@@ -15,7 +15,7 @@
 
 <body>
     <div>
-        <p>Hi {{ $user->name }},</p><br>
+        <p>Hi ,</p><br>
         <p>Thanks for choosing [Company Name]! We're excited to have you on board.</p><br>
         <p>To complete your registration, please enter the following one-time password (OTP) in the registration form:
         </p><br>

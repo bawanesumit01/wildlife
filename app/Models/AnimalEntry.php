@@ -16,7 +16,6 @@ class AnimalEntry extends Model
         'caller_aadhar_number',
         'rescued_animal_type',
         'animal_condition',
-        'animal_sex',
         'animal_description',
         'charges',
         'animal_image',

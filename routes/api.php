@@ -2,7 +2,10 @@
 
 use App\Http\Controllers\API\AnimalEntryController;
 use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\PanchnamaController;
 use App\Http\Controllers\API\ReptileEntryController;
+use App\Http\Controllers\API\RoadKillController;
+use App\Http\Controllers\API\SnakeBiteController;
 use App\Mail\OtpMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -40,5 +43,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/animal-data', [AnimalEntryController::class, 'getAllEntries']);
     Route::post('/reptile-entry', [ReptileEntryController::class, 'Reptile']);
     Route::get('/reptile-data', [ReptileEntryController::class, 'getAllEntries']);
+    Route::post('/roadkill-entry', [RoadKillController::class, 'Roadkill']);
+    Route::get('/roadkill-data', [RoadKillController::class, 'getAllEntries']);
+    Route::post('/snakebite-entry', [SnakeBiteController::class, 'SnakeBite']);
+    Route::get('/snakebite-data', [SnakeBiteController::class, 'getAllEntries']);
+    Route::post('/panchnama-entry', [PanchnamaController::class, 'Panchnama']);
+    Route::get('/panchnama-data', [PanchnamaController::class, 'getAllEntries']);
+    Route::get('/userdata', [AuthController::class, 'userdata']);
 });
 

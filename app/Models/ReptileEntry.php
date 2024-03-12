@@ -18,7 +18,6 @@ class ReptileEntry extends Model
         'snake',
         'venom',
         'reptile_condition',
-        'reptile_sex',
         'reptile_description',
         'charges',
         'reptile_image',

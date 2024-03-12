@@ -24,7 +24,6 @@ class AnimalEntryController extends Controller
                 'caller_aadhar_number',
                 'rescued_animal_type',
                 'animal_condition',
-                'animal_sex',
                 'animal_description',
                 'charges',
                 'animal_image',
@@ -37,15 +36,11 @@ class AnimalEntryController extends Controller
 
             $unknownFields = array_diff($requestFields, $allowedFields);
 
-            if (!empty($unknownFields)) {
+            if (!empty($unknownFields)) 
+            {
+                $unknownFieldsString = implode(', ', $unknownFields);
 
-                $errorResponse = [
-                    'error' => [
-                        'message' => 'Unknown fields present in the request.',
-                        'unknown_fields' => $unknownFields,
-                    ],
-                ];
-                return response()->json($errorResponse, Response::HTTP_UNPROCESSABLE_ENTITY);
+                 return response()->json(['message' => "$unknownFieldsString are unknown fields",'status' => false,'code' => 422], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
             $validationRules = [
@@ -56,7 +51,6 @@ class AnimalEntryController extends Controller
                 'caller_aadhar_number' => 'required|string|min:12|max:12',
                 'rescued_animal_type' => 'required|string|max:255',
                 'animal_condition' => 'required|string|max:255',
-                'animal_sex' => 'in:Male,Female|nullable',
                 'animal_description' => 'string|max:255|nullable',
                 'charges' => 'required|string|max:255',
                 'animal_image' => 'required|image|max:3072',
@@ -69,7 +63,7 @@ class AnimalEntryController extends Controller
 
             if ($validator->fails()) {
 
-                return response()->json(['error' => $validator->errors()], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return response()->json(['message' => $validator->errors(),'status' => false,'code'=> 422], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
             $this->validate($request, $validationRules);
@@ -82,7 +76,7 @@ class AnimalEntryController extends Controller
                 $imageName = time() . '.' . $animal_image->getClientOriginalExtension();
 
                 if (!in_array($animal_image->getClientOriginalExtension(), $allowedImageExtensions)) {
-                    return response()->json(['message' => 'Animal Image extension should be jpg, jpeg, png.', 'status' => false], 400);
+                    return response()->json(['message' => 'Animal Image extension should be jpg, jpeg, png.', 'status' => false,'code'=> 400], Response::HTTP_BAD_REQUEST);
                 }
 
                 $path = public_path('upload/animal');
@@ -110,7 +104,6 @@ class AnimalEntryController extends Controller
                 'caller_aadhar_number' => $request->caller_aadhar_number,
                 'rescued_animal_type' => $request->rescued_animal_type,
                 'animal_condition' => $request->animal_condition,
-                'animal_sex' => $request->animal_sex,
                 'animal_description' => $request->animal_description,
                 'charges' => $request->charges,
                 'animal_image' => $uploadedImages['animal_image'],
@@ -119,13 +112,13 @@ class AnimalEntryController extends Controller
                 'longitude' => $longitude,
             ]);
 
-            return response()->json(['message' => 'Animal Entry Added successfully'], 200);
+            return response()->json(['message' => 'Form Submitted Successfully','code' => 200,'status' => true],Response::HTTP_OK);
         } catch (\Exception $e) {
-            log::error('Error during animal entry: ' . $e->getMessage());
-            return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage()], 500);
+            log::error('Error during form Submitting: ' . $e->getMessage());
+            return response()->json(['message' => $e->getMessage(),'code' => 500,'status' => false],Response::HTTP_INTERNAL_SERVER_ERROR);
         } catch (\Illuminate\Validation\ValidationException $e) {
             $errors = $e->validator->getMessageBag();
-            return response()->json(['message' => 'Validation error', 'errors' => $errors->toArray(), 'status' => false], 422);
+            return response()->json(['message' =>  $errors->toArray(),'code' => 422,'status' => false], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
     }
 
@@ -139,10 +132,10 @@ class AnimalEntryController extends Controller
                 $entries = AnimalEntry::where('user_id', $user->id)->get();
             }
 
-            return response()->json(['entries' => $entries], 200);
+            return response()->json(['entries' => $entries,'status' => true,'code' => 200]);
         } catch (\Exception $e) {
             log::error('Error while fetching entries: ' . $e->getMessage());
-            return response()->json(['message' => 'An error occurred while processing your request.', 'status' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['message' => 'An error occurred while processing your request.','code' => 500,'status' => false,'error' => $e->getMessage()]);
         }
     }
 }

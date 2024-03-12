@@ -87,4 +87,17 @@ class RegisteredUserController extends Controller
 
         return redirect(RouteServiceProvider::HOME);
     }
+
+    public function showUser()
+    {
+        $user = User::where('role', 'user')->get();
+        return view('user.index', compact('user'));
+    }
+
+    public function userDetail($id)
+    {
+        $user = User::findOrFail($id);
+
+        return view('user.detail', ['user' => $user]);
+    }
 }
